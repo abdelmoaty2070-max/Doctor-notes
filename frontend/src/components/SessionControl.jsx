@@ -150,7 +150,10 @@ export default function SessionControl({ doctor, onProcessed }) {
         method: 'POST',
         body: formData,
       })
-      if (!res.ok) throw new Error('فشلت معالجة الجلسة')
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.detail || `فشلت معالجة الجلسة (${res.status})`)
+      }
       const data = await res.json()
       onProcessed({
         soap: data.soap,
