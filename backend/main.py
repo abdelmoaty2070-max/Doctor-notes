@@ -50,8 +50,8 @@ init_db()
 class LoginRequest(BaseModel):
     email: str
     password: str
-    name: Optional[str] = "د. عبد المعطي"
-    specialty: Optional[str] = "طب عام وباطنية"
+    name: Optional[str] = "د. السيد إبراهيم"
+    specialty: Optional[str] = "جراحة قلب وأوعية دموية"
     clinic: Optional[str] = "عيادة الرعاية الذكية"
 
 

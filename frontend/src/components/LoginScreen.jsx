@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { Stethoscope, Lock, Mail, Sparkles, ArrowLeft } from 'lucide-react'
 
 export default function LoginScreen({ onLogin }) {
-  const [name, setName] = useState('د. عبد المعطي')
-  const [specialty, setSpecialty] = useState('طب عام وباطنية')
-  const [email, setEmail] = useState('dr.abdelmoaty@clinic.ai')
+  const [name, setName] = useState('د. السيد إبراهيم')
+  const [specialty, setSpecialty] = useState('جراحة قلب وأوعية دموية')
+  const [email, setEmail] = useState('dr.elsayed@clinic.ai')
   const [password, setPassword] = useState('••••••••')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
