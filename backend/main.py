@@ -50,6 +50,9 @@ init_db()
 class LoginRequest(BaseModel):
     email: str
     password: str
+    name: Optional[str] = "د. عبد المعطي"
+    specialty: Optional[str] = "طب عام وباطنية"
+    clinic: Optional[str] = "عيادة الرعاية الذكية"
 
 
 class SoapNote(BaseModel):
@@ -96,9 +99,9 @@ def login(req: LoginRequest):
     return {
         "token": "mvp-demo-token-2026",
         "doctor": {
-            "name": "د. عبد المعطي",
-            "specialty": "طب عام وباطنية",
-            "clinic": "عيادة الرعاية الذكية",
+            "name": req.name or "د. عبد المعطي",
+            "specialty": req.specialty or "طب عام وباطنية",
+            "clinic": req.clinic or "عيادة الرعاية الذكية",
             "email": req.email,
         },
     }

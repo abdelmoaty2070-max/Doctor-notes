@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Stethoscope, Lock, Mail, Sparkles, ArrowLeft } from 'lucide-react'
 
 export default function LoginScreen({ onLogin }) {
+  const [name, setName] = useState('د. عبد المعطي')
+  const [specialty, setSpecialty] = useState('طب عام وباطنية')
   const [email, setEmail] = useState('dr.abdelmoaty@clinic.ai')
   const [password, setPassword] = useState('••••••••')
   const [loading, setLoading] = useState(false)
@@ -15,16 +17,15 @@ export default function LoginScreen({ onLogin }) {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, name, specialty }),
       })
       if (!res.ok) throw new Error('تعذر تسجيل الدخول')
       const data = await res.json()
       onLogin(data.doctor)
     } catch {
-      // Fallback for offline/static preview
       onLogin({
-        name: 'د. عبد المعطي',
-        specialty: 'طب عام وباطنية',
+        name: name || 'د. عبد المعطي',
+        specialty: specialty || 'طب عام وباطنية',
         clinic: 'عيادة الرعاية الذكية',
         email,
       })
@@ -51,7 +52,34 @@ export default function LoginScreen({ onLogin }) {
 
         {/* Login Card */}
         <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-xl shadow-slate-200/70 border border-white p-8">
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  اسم الطبيب
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:border-teal-500 outline-none transition text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  التخصص
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={specialty}
+                  onChange={(e) => setSpecialty(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:border-teal-500 outline-none transition text-sm"
+                />
+              </div>
+            </div>
+
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">
                 البريد الإلكتروني الطبي
