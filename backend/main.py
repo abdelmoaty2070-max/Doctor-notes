@@ -137,16 +137,26 @@ async def process_audio(
         client = genai.Client(api_key=api_key)
         prompt = f"""طبيب ({doctor_name}، {specialty}) ومريض باللهجة {dialect}. حوّل الحوار إلى تقرير SOAP طبي عربي مهني بصيغة JSON فقط بهذه المفاتيح:
 {{"subjective":"","objective":"","assessment":"","plan":"","medications":[""],"clinical_summary":""}}"""
-        response = client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=[
-                types.Part.from_bytes(data=audio_bytes, mime_type=mime_type),
-                prompt,
-            ],
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-            ),
-        )
+        last_err = None
+        response = None
+        for model_name in ["gemini-3.8-flash", "gemini-3.8-pro", "gemini-2.0-flash"]:
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=[
+                        types.Part.from_bytes(data=audio_bytes, mime_type=mime_type),
+                        prompt,
+                    ],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                    ),
+                )
+                break
+            except Exception as model_err:
+                last_err = model_err
+                continue
+        if response is None:
+            raise last_err
         soap_data = json.loads(response.text)
         return {"soap": soap_data, "mode": "ai"}
     except Exception as e:
