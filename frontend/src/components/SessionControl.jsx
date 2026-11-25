@@ -85,7 +85,9 @@ export default function SessionControl({ doctor, onProcessed }) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       streamRef.current = stream
-      const mediaRecorder = new MediaRecorder(stream)
+      const mediaRecorder = new MediaRecorder(stream, {
+        audioBitsPerSecond: 24000,
+      })
       mediaRecorderRef.current = mediaRecorder
       chunksRef.current = []
 

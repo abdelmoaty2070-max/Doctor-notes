@@ -135,21 +135,8 @@ async def process_audio(
         mime_type = audio.content_type or "audio/webm"
 
         client = genai.Client(api_key=api_key)
-        prompt = f"""
-أنت مساعد طبي ذكي متخصص في التوثيق الإكلينيكي (Clinical Documentation).
-المتحدثون في هذا التسجيل الصوتي هم طبيب ({doctor_name} - تخصص: {specialty}) ومريض يتحدث باللهجة {dialect}.
-المطلوب:
-1. فهم الحوار الطبي بدقة رغم اللهجة المحلية، وتحويل الأعراض والمصطلحات العامية إلى لغة طبية عربية مهنية.
-2. استخراج تقرير SOAP Note منظم بصيغة JSON فقط بدون أي نص إضافي، بالمفاتيح التالية:
-{{
-  "subjective": "الشكوى الرئيسية وتاريخ المرض الحالي كما ذكرها المريض",
-  "objective": "الفحص السريري والعلامات الحيوية المذكورة في الجلسة",
-  "assessment": "التشخيص المبدئي أو التفريقي",
-  "plan": "الخطة العلاجية والإرشادات والمتابعة",
-  "medications": ["اسم الدواء والجرعة والتكرار لكل دواء في عنصر منفصل"],
-  "clinical_summary": "ملخص إكلينيكي سريع في سطر واحد"
-}}
-"""
+        prompt = f"""طبيب ({doctor_name}، {specialty}) ومريض باللهجة {dialect}. حوّل الحوار إلى تقرير SOAP طبي عربي مهني بصيغة JSON فقط بهذه المفاتيح:
+{{"subjective":"","objective":"","assessment":"","plan":"","medications":[""],"clinical_summary":""}}"""
         response = client.models.generate_content(
             model="gemini-3.8-flash",
             contents=[
