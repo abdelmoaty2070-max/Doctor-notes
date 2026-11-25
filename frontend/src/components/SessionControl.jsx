@@ -31,6 +31,7 @@ export default function SessionControl({ doctor, onProcessed }) {
 
   const mediaRecorderRef = useRef(null)
   const chunksRef = useRef([])
+  const lastAudioBlobRef = useRef(null)
   const timerRef = useRef(null)
   const audioCtxRef = useRef(null)
   const animFrameRef = useRef(null)
@@ -124,18 +125,19 @@ export default function SessionControl({ doctor, onProcessed }) {
     }
   }
 
-  const processSession = async (isDemo = false) => {
+  const processSession = async (isDemo = false, retryLast = false) => {
     setStatus('processing')
     setError('')
 
-    let audioBlob = null
-    if (!isDemo && mediaRecorderRef.current) {
+    let audioBlob = retryLast ? lastAudioBlobRef.current : null
+    if (!isDemo && !retryLast && mediaRecorderRef.current) {
       await new Promise((resolve) => {
         mediaRecorderRef.current.onstop = resolve
         mediaRecorderRef.current.stop()
       })
       cleanupAudio()
       audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' })
+      lastAudioBlobRef.current = audioBlob
     }
 
     const formData = new FormData()
@@ -262,8 +264,16 @@ export default function SessionControl({ doctor, onProcessed }) {
         </div>
 
         {error && (
-          <div className="mb-6 text-sm text-rose-700 bg-rose-50 border border-rose-100 px-4 py-3 rounded-xl">
-            {error}
+          <div className="mb-6 text-sm text-rose-700 bg-rose-50 border border-rose-100 px-4 py-3 rounded-xl space-y-2">
+            <p>{error}</p>
+            {lastAudioBlobRef.current && (
+              <button
+                onClick={() => processSession(false, true)}
+                className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition cursor-pointer"
+              >
+                إعادة محاولة معالجة نفس التسجيل
+              </button>
+            )}
           </div>
         )}
 
