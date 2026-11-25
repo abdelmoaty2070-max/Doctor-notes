@@ -133,7 +133,7 @@ export default function ReportEditor({ doctor, sessionData, onBack }) {
 
           <button
             onClick={handlePrint}
-            className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-l from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white text-sm font-bold shadow-md shadow-teal-600/20 transition cursor-pointer"
+            className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-l from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white text-sm font-bold shadow-md shadow-sky-500/20 transition cursor-pointer"
           >
             <Printer className="w-4 h-4" />
             <span>طباعة على ورق العيادة</span>

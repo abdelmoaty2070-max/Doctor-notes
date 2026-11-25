@@ -283,7 +283,7 @@ export default function SessionControl({ doctor, onProcessed }) {
             <div className="relative">
               <button
                 onClick={handleStart}
-                className="relative z-10 w-24 h-24 rounded-full bg-gradient-to-br from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white shadow-xl shadow-teal-600/30 flex items-center justify-center transition-transform hover:scale-105 active:scale-95 cursor-pointer"
+                className="relative z-10 w-24 h-24 rounded-full bg-gradient-to-br from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white shadow-xl shadow-sky-500/30 flex items-center justify-center transition-transform hover:scale-105 active:scale-95 cursor-pointer"
                 title="بدء التسجيل"
               >
                 <Mic className="w-10 h-10" />
@@ -328,7 +328,7 @@ export default function SessionControl({ doctor, onProcessed }) {
 
             <button
               onClick={() => processSession(false)}
-              className="px-8 py-4 rounded-2xl bg-gradient-to-l from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold shadow-lg shadow-teal-600/25 flex items-center gap-2.5 transition cursor-pointer"
+              className="px-8 py-4 rounded-2xl bg-gradient-to-l from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold shadow-lg shadow-sky-500/25 flex items-center gap-2.5 transition cursor-pointer"
             >
               <CheckCircle2 className="w-5 h-5" />
               <span>إنهاء الجلسة والمعالجة</span>

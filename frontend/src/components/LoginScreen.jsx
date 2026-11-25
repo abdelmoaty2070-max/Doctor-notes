@@ -35,11 +35,11 @@ export default function LoginScreen({ onLogin }) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-teal-50/40 to-emerald-50/50 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-sky-50/60 to-blue-50/50 p-4">
       <div className="w-full max-w-md">
         {/* Brand Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-teal-600 to-emerald-600 text-white shadow-lg shadow-teal-600/25 mb-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-sky-500 to-blue-600 text-white shadow-lg shadow-sky-500/25 mb-4">
             <Stethoscope className="w-8 h-8" />
           </div>
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
@@ -123,7 +123,7 @@ export default function LoginScreen({ onLogin }) {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 px-6 rounded-xl bg-gradient-to-l from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold shadow-lg shadow-teal-600/25 hover:shadow-teal-600/35 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+              className="w-full py-3.5 px-6 rounded-xl bg-gradient-to-l from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold shadow-lg shadow-sky-500/25 hover:shadow-sky-500/35 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
             >
               <span>{loading ? 'جاري الدخول...' : 'دخول إلى العيادة'}</span>
               <ArrowLeft className="w-5 h-5" />
