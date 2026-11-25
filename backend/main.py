@@ -139,7 +139,7 @@ async def process_audio(
 {{"subjective":"","objective":"","assessment":"","plan":"","medications":[""],"clinical_summary":""}}"""
         last_err = None
         response = None
-        for model_name in ["gemini-3.8-flash", "gemini-3.8-pro", "gemini-2.0-flash"]:
+        for model_name in ["gemini-3.8-flash", "gemini-3.8-pro"]:
             try:
                 response = client.models.generate_content(
                     model=model_name,
