@@ -19,16 +19,16 @@ import {
 
 const DIALECTS = [
   'المصرية',
+  'العراقية',
   'السعودية',
   'الخليجية',
   'الإماراتية',
   'الشامية',
-  'العراقية',
   'العربية الفصحى',
 ]
 
 const PROCESSING_STEPS = [
-  'جاري رفع وتنقية الموجات الصوتية...',
+  'جاري ضغط ورفع الموجات الصوتية للخادم...',
   'تحويل الحوار باللهجة المحلية إلى مصطلحات إكلينيكية...',
   'بناء تقرير SOAP واستخراج الأدوية والجرعات...',
 ]
@@ -51,6 +51,76 @@ function getSupportedRecordingFormat() {
     }
   }
   return { mimeType: '', ext: 'webm', cleanMime: 'audio/webm' }
+}
+
+/**
+ * Downsamples & encodes an AudioBuffer to compact 8kHz 8-bit Mono WAV (~480KB/min)
+ * if a user uploads an oversized external audio file (> 4.2MB) so up to ~9 mins
+ * of uncompressed WAV or 30+ mins of live Opus fits safely under Vercel's 4.5MB limit.
+ */
+function encodeCompactWav(audioBuffer) {
+  const targetRate = 8000
+  const offlineLength = Math.floor(audioBuffer.duration * targetRate)
+  const mono = new Float32Array(offlineLength)
+  const ratio = audioBuffer.sampleRate / targetRate
+  const ch0 = audioBuffer.getChannelData(0)
+
+  for (let i = 0; i < offlineLength; i++) {
+    mono[i] = ch0[Math.min(ch0.length - 1, Math.floor(i * ratio))]
+  }
+
+  const buffer = new ArrayBuffer(44 + mono.length)
+  const view = new DataView(buffer)
+  const writeStr = (offset, str) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i))
+  }
+
+  writeStr(0, 'RIFF')
+  view.setUint32(4, 36 + mono.length, true)
+  writeStr(8, 'WAVE')
+  writeStr(12, 'fmt ')
+  view.setUint32(16, 16, true) // PCM
+  view.setUint16(20, 1, true)
+  view.setUint16(22, 1, true) // Mono
+  view.setUint32(24, targetRate, true)
+  view.setUint32(28, targetRate, true) // 8-bit = 1 byte/sample
+  view.setUint16(32, 1, true)
+  view.setUint16(34, 8, true) // 8 bits per sample
+  writeStr(36, 'data')
+  view.setUint32(40, mono.length, true)
+
+  for (let i = 0; i < mono.length; i++) {
+    const clamped = Math.max(-1, Math.min(1, mono[i]))
+    view.setUint8(44 + i, Math.round((clamped + 1) * 127.5))
+  }
+  return new Blob([buffer], { type: 'audio/wav' })
+}
+
+async function compressLargeAudioFileIfNeeded(file) {
+  const MAX_DIRECT_BYTES = 4.1 * 1024 * 1024
+  if (file.size <= MAX_DIRECT_BYTES) {
+    return { blob: file, filename: file.name || 'uploaded_audio.mp3' }
+  }
+
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext
+  if (!AudioContextClass) {
+    throw new Error('حجم الملف كبير جداً؛ يرجى اختيار مقطع صوتي أقل من 4 ميجابايت.')
+  }
+
+  const arrayBuffer = await file.arrayBuffer()
+  const tempCtx = new AudioContextClass()
+  let decoded
+  try {
+    decoded = await tempCtx.decodeAudioData(arrayBuffer)
+  } finally {
+    tempCtx.close().catch(() => {})
+  }
+
+  const wavBlob = encodeCompactWav(decoded)
+  if (wavBlob.size > 4.4 * 1024 * 1024) {
+    throw new Error('مدة الملف المرفوع تتجاوز الحد الأقصى؛ يرجى استخدام التسجيل المباشر للجلسات الطويلة.')
+  }
+  return { blob: wavBlob, filename: 'compressed_session.wav' }
 }
 
 export default function SessionControl({ doctor, onProcessed }) {
@@ -137,6 +207,7 @@ export default function SessionControl({ doctor, onProcessed }) {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
+          sampleRate: 16000,
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
@@ -146,7 +217,8 @@ export default function SessionControl({ doctor, onProcessed }) {
 
       const fmt = getSupportedRecordingFormat()
       formatRef.current = fmt
-      const recorderOptions = { audioBitsPerSecond: 32000 }
+      // 16 kbps Opus Mono = ~120 KB per minute -> supports up to 30+ continuous minutes (~3.6 MB) smoothly!
+      const recorderOptions = { audioBitsPerSecond: 16000 }
       if (fmt.mimeType) recorderOptions.mimeType = fmt.mimeType
 
       const mediaRecorder = new MediaRecorder(stream, recorderOptions)
@@ -227,7 +299,6 @@ export default function SessionControl({ doctor, onProcessed }) {
         patientName: patientName.trim() || data.suggested_patient || 'مريض غير مسمى',
         duration: formatTime(seconds),
         mode: data.mode,
-        model: data.model,
         processingSeconds: data.processing_seconds,
       })
     } catch (err) {
@@ -277,13 +348,19 @@ export default function SessionControl({ doctor, onProcessed }) {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
-    if (file.size > 4.4 * 1024 * 1024) {
-      setError('حجم الملف كبير جداً (الحد الأقصى 4.4 ميجابايت للرفع السريع). يرجى اختيار مقطع أقصر.')
-      return
+
+    setStatus('processing')
+    setError('')
+    startStepProgress()
+    try {
+      const payload = await compressLargeAudioFileIfNeeded(file)
+      lastAudioRef.current = payload
+      await submitAudioRequest({ isDemo: false, audioPayload: payload })
+    } catch (err) {
+      clearInterval(stepTimerRef.current)
+      setError(err.message || 'تعذر ضغط الملف الصوتي المرفوع')
+      setStatus('idle')
     }
-    const payload = { blob: file, filename: file.name || 'uploaded_audio.mp3' }
-    lastAudioRef.current = payload
-    await submitAudioRequest({ isDemo: false, audioPayload: payload })
   }
 
   return (
@@ -305,7 +382,7 @@ export default function SessionControl({ doctor, onProcessed }) {
 
           <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 px-3.5 py-1.5 rounded-full text-xs font-semibold border border-emerald-100">
             <Radio className="w-3.5 h-3.5 animate-pulse" />
-            <span>محرك الذكاء الاصطناعي الطبي متصل</span>
+            <span>خادم الذكاء الاصطناعي متصل</span>
           </div>
         </div>
 
@@ -336,7 +413,7 @@ export default function SessionControl({ doctor, onProcessed }) {
             </label>
             <input
               type="text"
-              placeholder="مثال: محمود عبد الرحمن"
+              placeholder="مثال: حسن علي هادي"
               value={patientName}
               onChange={(e) => setPatientName(e.target.value)}
               disabled={status === 'processing'}
@@ -427,7 +504,7 @@ export default function SessionControl({ doctor, onProcessed }) {
             <div>
               <p className="font-bold text-slate-800 text-lg">اضغط لبدء تسجيل الكشف الطبي</p>
               <p className="text-slate-500 text-sm mt-1">
-                تحدث بشكل طبيعي مع المريض، وسيقوم النظام باستخراج التقرير الطبي والروشتة خلال ثوانٍ
+                يستوعب جلسة استشارة كاملة (حتى 30 دقيقة متواصلة) ويستخرج التقرير والروشتة تلقائياً
               </p>
             </div>
 
@@ -509,7 +586,7 @@ export default function SessionControl({ doctor, onProcessed }) {
             <div>
               <p className="font-bold text-slate-800 text-lg">{PROCESSING_STEPS[stepIdx]}</p>
               <p className="text-xs text-slate-500 mt-1">
-                يعمل بنموذج Gemini الطبي فائق السرعة — يستغرق عادةً 3 إلى 7 ثوانٍ
+                محرك ذكاء اصطناعي على لاب توب سعيد العراقي
               </p>
             </div>
             <div className="flex items-center gap-2 mt-1">

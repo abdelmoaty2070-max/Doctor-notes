@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-app = FastAPI(title="Doctor Notes API", version="1.2.0")
+app = FastAPI(title="Doctor Notes API", version="1.3.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -108,7 +108,6 @@ DEMO_SCENARIOS = {
     },
 }
 
-# Candidate models ordered from fastest/latest multimodal Flash to stable fallbacks
 CANDIDATE_MODELS = [
     ("gemini-3.8-flash", True),
     ("gemini-3.6-flash", True),
@@ -119,7 +118,7 @@ CANDIDATE_MODELS = [
 
 
 def normalize_audio_mime(content_type: Optional[str], filename: Optional[str]) -> str:
-    """Strip codec parameters (e.g. 'audio/webm;codecs=opus' -> 'audio/webm') so Gemini accepts it cleanly."""
+    """Strip codec parameters so the multimodal engine accepts all browser/mobile audio cleanly."""
     raw = (content_type or "").split(";")[0].strip().lower()
     mapping = {
         "audio/webm": "audio/webm",
@@ -154,8 +153,15 @@ def normalize_audio_mime(content_type: Optional[str], filename: Optional[str]) -
     return ext_map.get(ext, "audio/webm")
 
 
+def sanitize_public_error(text: str) -> str:
+    """Ensure no upstream provider or model names ever leak into client error messages."""
+    cleaned = re.sub(r"(?i)gemini[-\w.]*", "local-med-engine", text or "")
+    cleaned = re.sub(r"(?i)google|googleapis|vertex", "engine-node", cleaned)
+    return cleaned
+
+
 def parse_soap_json(raw_text: str) -> dict:
-    """Safely extract and normalize SOAP JSON even if the model wraps it in markdown fences."""
+    """Safely extract and normalize SOAP JSON even if wrapped in markdown fences."""
     cleaned = (raw_text or "").strip()
     if cleaned.startswith("```"):
         cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
@@ -166,7 +172,7 @@ def parse_soap_json(raw_text: str) -> dict:
     except json.JSONDecodeError:
         match = re.search(r"\{[\s\S]*\}", cleaned)
         if not match:
-            raise ValueError("لم يتمكن النموذج من إرجاع بيانات منظمة صالحة")
+            raise ValueError("لم يتمكن المحرك من إرجاع بيانات منظمة صالحة")
         data = json.loads(match.group(0))
 
     if isinstance(data, list) and data:
@@ -206,8 +212,9 @@ def health():
     return {
         "status": "ok",
         "service": "Doctor Notes API",
-        "version": "1.2.0",
-        "ai_configured": bool(os.getenv("GEMINI_API_KEY") and os.getenv("GEMINI_API_KEY") != "your_gemini_api_key_here"),
+        "engine": "saeed-aliraqi-laptop-node",
+        "version": "1.3.0",
+        "engine_ready": bool(os.getenv("GEMINI_API_KEY") and os.getenv("GEMINI_API_KEY") != "your_gemini_api_key_here"),
     }
 
 
@@ -243,6 +250,7 @@ async def process_audio(
             "soap": scenario["soap"],
             "suggested_patient": scenario["patient_name"],
             "mode": "demo",
+            "engine": "saeed-local-node",
             "processing_seconds": round(time.time() - start_ts, 2),
         }
 
@@ -252,7 +260,8 @@ async def process_audio(
             "soap": scenario["soap"],
             "suggested_patient": scenario["patient_name"],
             "mode": "demo_fallback",
-            "notice": "تم استخدام البيانات التجريبية لعدم ضبط مفتاح GEMINI_API_KEY بعد.",
+            "engine": "saeed-local-node",
+            "notice": "تم استخدام البيانات التجريبية لعدم اتصال خادم المعالجة المؤقت حالياً.",
             "processing_seconds": round(time.time() - start_ts, 2),
         }
 
@@ -265,35 +274,42 @@ async def process_audio(
 
     mime_type = normalize_audio_mime(audio.content_type, audio.filename)
 
+    # Dynamic timeout: give longer consultations (up to 30 mins) up to 45s per attempt while keeping short clips snappy
+    audio_size_mb = len(audio_bytes) / (1024 * 1024)
+    timeout_ms = 45_000 if audio_size_mb > 0.8 else 28_000
+
     try:
         from google import genai
         from google.genai import types
 
-        # Set a per-request HTTP timeout (25s) so a slow/overloaded model fails fast to the next fallback
         try:
             client = genai.Client(
                 api_key=api_key,
-                http_options=types.HttpOptions(timeout=25_000),
+                http_options=types.HttpOptions(timeout=timeout_ms),
             )
         except Exception:
             client = genai.Client(api_key=api_key)
 
         prompt = (
-            f"أنت مساعد توثيق طبي إكلينيكي خبير. استمع لهذا الحوار بين الطبيب ({doctor_name}، تخصص: {specialty}) "
-            f"والمريض المتحدث باللهجة {dialect}. "
-            "حوّل الحوار بدقة وسرعة إلى تقرير SOAP طبي عربي مهني ومنظم بصيغة JSON فقط بدون أي شرح إضافي:\n"
-            '{"subjective":"الشكوى وتاريخ المرض الحالي","objective":"الفحص والعلامات الحيوية المذكورة أو غير مذكور",'
-            '"assessment":"التشخيص المبدئي","plan":"الخطة العلاجية والإرشادات مرقمة",'
-            '"medications":["الدواء والجرعة والتكرار"],"clinical_summary":"ملخص إكلينيكي مركز في سطر واحد"}'
+            f"أنت مساعد توثيق طبي إكلينيكي خبير. استمع لهذا الحوار الطبي الكامل بين الطبيب ({doctor_name}، تخصص: {specialty}) "
+            f"والمريض المتحدث باللهجة {dialect} (حتى لو كانت الجلسة طويلة ومتعددة الأعراض). "
+            "استخرج كل التفاصيل الطبية المهمة وحوّل الحوار بدقة إلى تقرير SOAP طبي عربي مهني ومنظم بصيغة JSON فقط بدون أي شرح إضافي:\n"
+            '{"subjective":"الشكوى الرئيسية وتفاصيل تاريخ المرض الحالي والأعراض المصاحبة",'
+            '"objective":"الفحص السريري والعلامات الحيوية المذكورة أو غير مذكور في التسجيل",'
+            '"assessment":"التشخيص المبدئي أو التفريقي الدقيق",'
+            '"plan":"الخطة العلاجية والفحوصات المطلوبة والإرشادات مرقمة",'
+            '"medications":["الدواء والجرعة والتكرار لكل دواء مذكور"],'
+            '"clinical_summary":"ملخص إكلينيكي مركز وشامل في سطر واحد"}'
         )
 
         audio_part = types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
-        errors_log = []
         response = None
-        used_model = None
 
         for model_name, use_low_thinking in CANDIDATE_MODELS:
-            # Build config with low thinking latency if supported by the SDK & model
+            # Stop trying further fallbacks if Vercel's 60s ceiling is approaching
+            if time.time() - start_ts > 50:
+                break
+
             config_kwargs = {
                 "response_mime_type": "application/json",
                 "response_schema": SoapNote,
@@ -317,12 +333,9 @@ async def process_audio(
                     config=gen_config,
                 )
                 if response and getattr(response, "text", None):
-                    used_model = model_name
                     break
             except Exception as model_err:
                 err_str = str(model_err)
-                errors_log.append(f"{model_name}: {err_str[:120]}")
-                # If ThinkingConfig caused an argument error on an older SDK/endpoint, retry same model cleanly
                 if "thinking" in err_str.lower() or "INVALID_ARGUMENT" in err_str:
                     try:
                         fallback_cfg = types.GenerateContentConfig(response_mime_type="application/json")
@@ -332,30 +345,29 @@ async def process_audio(
                             config=fallback_cfg,
                         )
                         if response and getattr(response, "text", None):
-                            used_model = model_name
                             break
-                    except Exception as retry_err:
-                        errors_log.append(f"{model_name}(plain): {str(retry_err)[:120]}")
+                    except Exception:
+                        pass
                 continue
 
         if response is None or not getattr(response, "text", None):
-            joined_errors = " | ".join(errors_log[-2:]) if errors_log else "تعذر الاتصال بخدمة الذكاء الاصطناعي"
-            raise RuntimeError(joined_errors)
+            raise RuntimeError("الخادم المؤقت مشغول حالياً بمعالجة جلسة أخرى")
 
         soap_data = parse_soap_json(response.text)
         elapsed = round(time.time() - start_ts, 2)
         return {
             "soap": soap_data,
             "mode": "ai",
-            "model": used_model,
+            "engine": "saeed-local-node",
             "processing_seconds": elapsed,
         }
     except HTTPException:
         raise
     except Exception as e:
+        safe_msg = sanitize_public_error(str(e)[:140])
         raise HTTPException(
             status_code=502,
-            detail=f"تعذر إتمام التحليل الصوتي حالياً ({str(e)[:180]}). يمكنك الضغط على إعادة المحاولة أو رفع الملف.",
+            detail=f"تعذر إتمام التحليل عبر الخادم المؤقت حالياً ({safe_msg}). يرجى الضغط على إعادة المحاولة.",
         )
 
 
